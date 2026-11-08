@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NEBULA virtual worm</title>
+<meta name="description" content="A generative model of C. elegans neural activity and behavior driving a simulated worm body in real time, in the browser.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M4 20c4-8 8 4 12-4s8 4 12-4%22 fill=%22none%22 stroke=%22%23d9cfbd%22 stroke-width=%224%22 stroke-linecap=%22round%22/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="title">
+    <h1>NEBULA virtual worm</h1>
+    <p>A generative model of <i>C. elegans</i> neural activity and behavior, running in your browser and driving a physical worm body in real time.</p>
+  </div>
+  <div class="toolbar" role="toolbar" aria-label="Simulation controls">
+    <button id="play" class="btn primary" aria-pressed="true" title="Play / pause (space)"><span class="ico" aria-hidden="true">❚❚</span><span class="lab">Pause</span></button>
+    <button id="restart" class="btn" title="A new worm from another moment of the recording (N)">New worm</button>
+    <div class="seg" role="group" aria-label="Mode">
+      <span class="seg-label">Mode</span>
+      <button data-mode="rollout" aria-pressed="true">Generative</button>
+      <button data-mode="loop" aria-pressed="false">Closed loop</button>
+    </div>
+    <div class="seg" role="group" aria-label="Speed">
+      <span class="seg-label">Speed</span>
+      <button data-speed="0.5" aria-pressed="false">0.5×</button>
+      <button data-speed="1" aria-pressed="true">1×</button>
+      <button data-speed="2" aria-pressed="false">2×</button>
+      <button data-speed="4" aria-pressed="false">4×</button>
+    </div>
+    <div class="seg" role="group" aria-label="Time window">
+      <span class="seg-label">Window</span>
+      <button data-window="30" aria-pressed="false">30 s</button>
+      <button data-window="60" aria-pressed="true">1 min</button>
+      <button data-window="120" aria-pressed="false">2 min</button>
+    </div>
+  </div>
+  <p id="status" class="status" aria-live="polite">Loading the model…</p>
+</header>
+
+<main class="grid">
+  <section class="card arena-card" aria-label="Worm">
+    <canvas id="arena" aria-label="The simulated worm crawling on agar; its head path is colored by behavior"></canvas>
+    <div class="arena-ui">
+      <button class="btn small" id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="btn small" id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="card" aria-labelledby="beh-h">
+      <h2 id="beh-h">Decoded behavior</h2>
+      <div class="now">
+        <span id="now-swatch" class="swatch big"></span>
+        <div>
+          <div id="now-name" class="now-name">–</div>
+          <div id="now-dwell" class="muted small">&nbsp;</div>
+        </div>
+      </div>
+      <div id="probs" class="probs" aria-label="Probability of each behavior"></div>
+    </section>
+
+    <section class="card" aria-labelledby="sil-h">
+      <h2 id="sil-h">Silence neurons</h2>
+      <p id="sil-note" class="muted small">Silencing acts through the encoder, so it needs <button class="linkish" id="to-loop">closed-loop mode</button>.</p>
+      <div class="chip-label">Blocks (neurons tuned to a behavior)</div>
+      <div id="blocks" class="chips"></div>
+      <div class="chip-label">Single neurons</div>
+      <div id="singles" class="chips"></div>
+      <div class="pick">
+        <select id="more" aria-label="Silence another neuron"><option value="">Another neuron…</option></select>
+        <button id="clear" class="btn small">Clear</button>
+      </div>
+      <p class="muted small">Silenced neurons are held at their 1st-percentile activity. The body follows the model with about 1 s of delay.</p>
+    </section>
+  </aside>
+
+  <section class="card wide" aria-labelledby="eth-h">
+    <h2 id="eth-h">Ethogram</h2>
+    <canvas id="ethogram" aria-label="Decoded behavior over the time window"></canvas>
+    <div id="legend" class="legend"></div>
+  </section>
+
+  <section class="card traces-card" aria-labelledby="tr-h">
+    <h2 id="tr-h">Decoded activity of command and premotor neurons</h2>
+    <canvas id="traces" aria-label="Decoded neural traces"></canvas>
+  </section>
+
+  <section class="card latent-card" aria-labelledby="lat-h">
+    <h2 id="lat-h">Latent space</h2>
+    <canvas id="latent" aria-label="Three-dimensional latent space: the encoded recording and the current trajectory"></canvas>
+    <p class="muted small">Dots: the recording, encoded. Line: the worm's latent trajectory over the window. Drag to rotate.</p>
+  </section>
+
+  <section class="card wide" aria-labelledby="hm-h">
+    <h2 id="hm-h">All 109 neurons (activity, z-scored by the recording)</h2>
+    <canvas id="heatmap" aria-label="Heat map of the decoded activity of all neurons"></canvas>
+  </section>
+
+  <section class="card wide about" aria-labelledby="how-h">
+    <h2 id="how-h">How it works</h2>
+    <ol class="pipeline">
+      <li><b>Transition.</b> The model's state is a point in a 3-D latent space. Every 0.34 s (one frame of the recording) the transition network draws the next point.</li>
+      <li><b>Decoders.</b> Two recurrent decoders read the latent trajectory and output the activity of 109 neurons and the behavior.</li>
+      <li><b>Closed loop.</b> In closed-loop mode the decoded activity, with the silenced neurons held low, is encoded back into the latent space before the next transition. In generative mode the transition runs on its own.</li>
+      <li><b>Body.</b> Each behavior sets a body wave (eigenworm phase and turn amplitude). The resulting curvature drives a Newtonian model of the worm's body on agar (ElegansBot), integrated every 50 µs.</li>
+    </ol>
+    <p class="muted small">Model: NEBULA, trained on the whole-brain recording of worm 1 of Kato et al., <a href="https://doi.org/10.1016/j.cell.2015.09.034">Global brain dynamics embed the motor command sequence of <i>Caenorhabditis elegans</i></a>, Cell 163, 656–669 (2015). Body: <a href="https://github.com/TaegonChung/ElegansBot">ElegansBot</a> (MIT License, © 2023 Taegon Chung), ported to JavaScript; Chung, Chang &amp; Kim, <a href="https://doi.org/10.7554/eLife.92562">Development of equation of motion deciphering locomotion including omega turns of <i>Caenorhabditis elegans</i></a>, eLife (2024). Everything runs locally in this page.</p>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
