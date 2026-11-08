@@ -25,15 +25,15 @@
     <div class="seg" role="group" aria-label="Speed">
       <span class="seg-label">Speed</span>
       <button data-speed="0.5" aria-pressed="false">0.5×</button>
-      <button data-speed="1" aria-pressed="true">1×</button>
-      <button data-speed="2" aria-pressed="false">2×</button>
+      <button data-speed="1" aria-pressed="false">1×</button>
+      <button data-speed="2" aria-pressed="true">2×</button>
       <button data-speed="4" aria-pressed="false">4×</button>
     </div>
     <div class="seg" role="group" aria-label="Time window">
       <span class="seg-label">Window</span>
-      <button data-window="30" aria-pressed="false">30 s</button>
-      <button data-window="60" aria-pressed="true">1 min</button>
-      <button data-window="120" aria-pressed="false">2 min</button>
+      <button data-window="60" aria-pressed="false">1 min</button>
+      <button data-window="120" aria-pressed="true">2 min</button>
+      <button data-window="300" aria-pressed="false">5 min</button>
     </div>
   </div>
   <p id="status" class="status" aria-live="polite">Loading the model…</p>
@@ -82,9 +82,30 @@
     <div id="legend" class="legend"></div>
   </section>
 
-  <section class="card traces-card" aria-labelledby="tr-h">
-    <h2 id="tr-h">Decoded activity of command and premotor neurons</h2>
-    <canvas id="traces" aria-label="Decoded neural traces"></canvas>
+  <section class="card wide" aria-labelledby="act-h">
+    <div class="card-head">
+      <h2 id="act-h">Decoded neural activity</h2>
+      <div class="panel-ctrl">
+        <div class="seg compact" role="group" aria-label="View">
+          <span class="seg-label">View</span>
+          <button data-view="curves" aria-pressed="true">Curves</button>
+          <button data-view="raster" aria-pressed="false">Raster</button>
+        </div>
+        <div class="seg compact" role="group" aria-label="Neurons">
+          <span class="seg-label">Neurons</span>
+          <button data-set="core" aria-pressed="false">Command &amp; premotor <span class="n" id="n-core"></span></button>
+          <button data-set="named" aria-pressed="true">Named <span class="n" id="n-named"></span></button>
+          <button data-set="all" aria-pressed="false">All <span class="n" id="n-all"></span></button>
+        </div>
+        <div class="seg compact" role="group" aria-label="Scale">
+          <span class="seg-label">Scale</span>
+          <button data-z="0" aria-pressed="true">Raw</button>
+          <button data-z="1" aria-pressed="false">z-scored</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="activity" aria-label="Decoded activity of the selected neurons over the time window"></canvas>
+    <p class="muted small">Neurons are grouped by the behavior they are most active in during the recording (the blocks of the silencing panel), in the order of the behavioral cycle: forward, reversal, ventral turn, dorsal turn, then the others; within a group, the most tuned first. Raw: the decoded ΔF/F (bleach-corrected, the units of the recording the model was trained on); each curve is centred on the neuron's mean in the recording. z-scored: by each neuron's mean and standard deviation in the recording. Neurons silenced one by one are always shown.</p>
   </section>
 
   <section class="card latent-card" aria-labelledby="lat-h">
@@ -93,12 +114,7 @@
     <p class="muted small">Dots: the recording, encoded. Line: the worm's latent trajectory over the window. Drag to rotate.</p>
   </section>
 
-  <section class="card wide" aria-labelledby="hm-h">
-    <h2 id="hm-h">All 109 neurons (activity, z-scored by the recording)</h2>
-    <canvas id="heatmap" aria-label="Heat map of the decoded activity of all neurons"></canvas>
-  </section>
-
-  <section class="card wide about" aria-labelledby="how-h">
+  <section class="card about" aria-labelledby="how-h">
     <h2 id="how-h">How it works</h2>
     <ol class="pipeline">
       <li><b>Transition.</b> The model's state is a point in a 3-D latent space. Every 0.34 s (one frame of the recording) the transition network draws the next point.</li>

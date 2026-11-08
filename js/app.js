@@ -2,13 +2,13 @@
 // activity and the latent trajectory at the display time `tau` (seconds of worm time).
 const $ = (q) => document.querySelector(q);
 const FPS = 32;              // body frames per second
-const KEEP = 130;            // seconds of history kept
+const KEEP = 310;            // seconds of history kept
 const TRAIL = 60;            // seconds of head path drawn
-const INK = '#e9ecef', INK2 = '#b4bbc4', INK3 = '#7c8591', LINE = '#2a2f37', SIL = '#e08a4f';
+const INK = '#e9ecef', INK2 = '#b4bbc4', INK3 = '#7c8591', LINE = '#2a2f37', SIL = '#e08a4f', TRACE = '#d3d9e0';
 
 const S = {
   meta: null, worker: null, fpsL: 2.9046,
-  playing: true, speed: 1, win: 60, loop: false, blocks: new Set(), singles: new Set(),
+  playing: true, speed: 2, win: 120, loop: false, blocks: new Set(), singles: new Set(),
   epoch: 0, tau: 0, frames: [], f0: 0, steps: [], start: null,
   cam: { x: 0, y: 0, init: false }, zoom: 3.2, rot: { az: 160, el: 30 }, rate: 1, last: 0,
 };
@@ -108,6 +108,11 @@ function buildControls() {
   $('#to-loop').addEventListener('click', () => setMode(true));
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => { S.speed = +b.dataset.speed; pressed(b.parentNode, b); }));
   document.querySelectorAll('[data-window]').forEach((b) => b.addEventListener('click', () => { S.win = +b.dataset.window; pressed(b.parentNode, b); }));
+  const opt = (attr, set) => document.querySelectorAll(`[${attr}]`).forEach((b) => b.addEventListener('click', () => { set(b); pressed(b.parentNode, b); }));
+  opt('data-view', (b) => { ACT.view = b.dataset.view; });
+  opt('data-set', (b) => { ACT.set = b.dataset.set; });
+  opt('data-z', (b) => { ACT.z = b.dataset.z === '1'; });
+  $('#n-core').textContent = S.meta.core.length; $('#n-named').textContent = NAMED.size; $('#n-all').textContent = S.meta.n_neurons;
   $('#zoom-in').addEventListener('click', () => { S.zoom = Math.max(1.2, S.zoom / 1.3); });
   $('#zoom-out').addEventListener('click', () => { S.zoom = Math.min(16, S.zoom * 1.3); });
   $('#arena').addEventListener('wheel', (e) => { e.preventDefault(); S.zoom = Math.min(16, Math.max(1.2, S.zoom * Math.exp(e.deltaY * 0.0015))); }, { passive: false });
@@ -163,21 +168,21 @@ function buildControls() {
 }
 
 // ------------------------------------------------------------------------------------------------- static data
-let ROWS = null, LUT = null;
+let NAMED = null, LUT = null, SEQ = null, STD90 = 1, RAW = { lo: 0, hi: 1 };
 function prepareStatic() {
-  const m = S.meta, inBlock = new Set();
-  ROWS = [];
-  for (const [b, label] of [['reversal', 'reversal'], ['forward', 'forward'], ['ventral turn', 'ventral turn'], ['dorsal turn', 'dorsal turn']]) {
-    const idx = m.blocks[b].filter((i) => !inBlock.has(i));
-    idx.forEach((i) => inBlock.add(i));
-    ROWS.push({ label, idx });
-  }
-  ROWS.push({ label: 'other', idx: m.neuron_names.map((_, i) => i).filter((i) => !inBlock.has(i)) });
-  // diverging colormap for z-scores: blue - dark neutral - orange
-  const neg = [91, 155, 213], mid = [28, 31, 36], pos = [242, 162, 92];
+  const m = S.meta, pct = (a, q) => [...a].sort((u, v) => u - v)[Math.floor(q * (a.length - 1))];
+  NAMED = new Set(m.neuron_names.map((n, i) => i).filter((i) => !m.neuron_names[i].startsWith('#')));
+  STD90 = pct(m.std, 0.9);                                       // raw curves: the gain that gives a 90th-percentile neuron
+  RAW.hi = pct(m.mean.map((v, i) => v + 2 * m.std[i]), 0.9);     // the z-scored amplitude; raw raster: 0 to this value
+  // diverging colormap for z-scores: blue - dark neutral - orange; sequential for raw activity: dark - orange - pale
+  const neg = [91, 155, 213], mid = [28, 31, 36], pos = [242, 162, 92], top = [255, 240, 222];
   LUT = Array.from({ length: 256 }, (_, k) => {
     const t = k / 255 * 2 - 1, a = Math.abs(t), c = t < 0 ? neg : pos;
     return mid.map((v, j) => Math.round(v + (c[j] - v) * a));
+  });
+  SEQ = Array.from({ length: 256 }, (_, k) => {
+    const t = k / 255, [a, b, u] = t < 0.75 ? [mid, pos, t / 0.75] : [pos, top, (t - 0.75) / 0.25];
+    return a.map((v, j) => Math.round(v + (b[j] - v) * u));
   });
 }
 const zscore = (i, v) => (v - S.meta.mean[i]) / S.meta.std[i];
@@ -193,12 +198,12 @@ function fit(canvas) {
 }
 
 function timeAxis(ctx, x0, x1, y, win) {
-  const step = [5, 10, 20, 30, 60].find((v) => (x1 - x0) * v / win >= 80) || win;   // labels at least 80 px apart
+  const step = [5, 10, 20, 30, 60, 120, 300].find((v) => (x1 - x0) * v / win >= 80) || win;   // labels >= 80 px apart
   ctx.fillStyle = INK3; ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'top';
   for (let s = 0; s <= win; s += step) {
     const x = x1 - (s / win) * (x1 - x0);
     ctx.textAlign = s === 0 ? 'right' : s === win ? 'left' : 'center';
-    ctx.fillText(s === 0 ? 'now' : `−${s} s`, x, y);
+    ctx.fillText(s === 0 ? 'now' : win > 60 ? `−${fmt(s)}` : `−${s} s`, x, y);
     ctx.fillRect(x - 0.5, y - 4, 1, 3);
   }
 }
@@ -355,89 +360,139 @@ function drawEthogram() {
   timeAxis(ctx, x0, x1, 48, S.win);
 }
 
-// ------------------------------------------------------------------------------------------------- traces
-function drawTraces() {
-  const { ctx, w, h } = fit($('#traces'));
-  ctx.clearRect(0, 0, w, h);
-  const m = S.meta, extra = [...S.singles].filter((i) => !m.core.includes(i));
-  const rows = [...m.core, ...extra], gut = 54, top = 4, bottom = 22;
-  const rh = (h - top - bottom) / rows.length, { i0, i1, x } = view(gut, w - 4);
-  // behavior bands
-  for (let i = i0; i <= i1; i++) {
-    const st = stepAt(i);
-    if (!st) continue;
-    const a = Math.max(gut, x(i / S.fpsL)), b = Math.min(w - 4, x(Math.min(S.tau, (i + 1) / S.fpsL)));
-    if (b > a) { ctx.fillStyle = m.behavior_colors[st.label]; ctx.globalAlpha = 0.14; ctx.fillRect(a, top, b - a + 0.6, h - top - bottom); }
-  }
-  ctx.globalAlpha = 1;
-  ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
-  rows.forEach((n, r) => {
-    const yc = top + rh * (r + 0.5), amp = rh * 0.42;
-    const isSil = silenced().includes(n) && S.loop;
-    ctx.fillStyle = isSil ? SIL : INK2; ctx.fillText(m.neuron_names[n], gut - 8, yc);
-    ctx.lineWidth = 1.3; ctx.lineJoin = 'round';
-    let prev = null;
-    for (let i = i0; i <= i1; i++) {
-      const st = stepAt(i);
-      if (!st) { prev = null; continue; }
-      const px = x(i / S.fpsL), py = yc - Math.max(-2.5, Math.min(2.5, zscore(n, st.x[n]))) * amp;
-      if (prev) {
-        ctx.strokeStyle = st.silenced.includes(n) ? SIL : '#d3d9e0';
-        ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(px, py); ctx.stroke();
-      }
-      prev = [px, py];
-    }
-  });
-  timeAxis(ctx, gut, w - 4, h - bottom + 6, S.win);
+// ------------------------------------------------------------------------------------------------- decoded activity
+// One panel, two views: curves (cached in an offscreen canvas drawn at the time of the last step, then shifted to the
+// display time) or raster (one pixel per step and neuron, scaled). Rows follow meta.order (groups of the silencing
+// blocks); the neurons silenced one by one are always shown.
+const ACT = { view: 'curves', set: 'named', z: false, off: null, key: '', img: null, ikey: '' };
+
+function activityRows() {
+  const m = S.meta, base = ACT.set === 'core' ? new Set(m.core) : ACT.set === 'named' ? NAMED : null;
+  return m.order.filter((i) => !base || base.has(i) || S.singles.has(i));
 }
 
-// ------------------------------------------------------------------------------------------------- heat map
-const HM = { img: null, key: '' };
-function drawHeatmap() {
-  const { ctx, w, h } = fit($('#heatmap'));
+function activityLayout(w, n) {
+  const curves = ACT.view === 'curves';
+  const rh = curves ? (n <= 16 ? 26 : n <= 40 ? 17 : 11) : (n <= 16 ? 16 : n <= 40 ? 9 : 4.5);
+  const names = rh >= 8, groups = !names || w >= 560;
+  const gut = (groups ? 96 : 0) + (names ? 52 : 0) + 8, right = w < 560 ? 54 : 74, top = 4, bottom = 24;
+  return { rh, names, groups, gut, right, top, bottom, H: Math.round(top + n * rh + bottom) };
+}
+
+function drawActivity() {
+  const cv = $('#activity'), rows = activityRows(), n = rows.length, m = S.meta;
+  const L = activityLayout(cv.getBoundingClientRect().width, n);
+  if (cv.style.height !== `${L.H}px`) cv.style.height = `${L.H}px`;
+  const { ctx, w, h } = fit(cv), x0 = L.gut, x1 = w - L.right, ph = n * L.rh;
   ctx.clearRect(0, 0, w, h);
-  const gut = 118, right = 70, top = 2, bottom = 22, n = S.meta.n_neurons;
-  const { i0, i1, x } = view(gut, w - right);
-  const order = ROWS.flatMap((r) => r.idx), cols = i1 - i0 + 1;
-  if (cols <= 0) return;
-  const key = `${i0}|${i1}|${S.steps.length ? S.steps[0].i : 0}`;
-  if (HM.key !== key) {
-    HM.key = key;
-    if (!HM.img || HM.img.width !== cols) { HM.img = document.createElement('canvas'); HM.img.width = cols; HM.img.height = n; }
-    const c = HM.img.getContext('2d'), im = c.createImageData(cols, n);
-    for (let k = 0; k < cols; k++) {
-      const st = stepAt(i0 + k);
-      order.forEach((neuron, r) => {
-        const o = (r * cols + k) * 4;
-        if (!st) { im.data[o + 3] = 0; return; }
-        const z = Math.max(-2.5, Math.min(2.5, zscore(neuron, st.x[neuron])));
-        const rgb = LUT[Math.round((z / 2.5 + 1) / 2 * 255)];
-        im.data[o] = rgb[0]; im.data[o + 1] = rgb[1]; im.data[o + 2] = rgb[2]; im.data[o + 3] = 255;
-      });
-    }
-    c.putImageData(im, 0, 0);
+  const { i0, i1, x } = view(x0, x1), k = (x1 - x0) / S.win;
+  const gain = ACT.z ? L.rh * 0.42 : L.rh * 0.42 / STD90;
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, L.top, x1 - x0, ph); ctx.clip();
+  if (ACT.view === 'curves') {
+    curvesImage(cv, L, rows, x1, k, i0, i1, gain);
+    ctx.drawImage(ACT.off, -(S.tau - i1 / S.fpsL) * k, 0, w, h);
+  } else if (i1 >= i0) {
+    rasterImage(rows, i0, i1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(ACT.img, x(i0 / S.fpsL), L.top, x((i1 + 1) / S.fpsL) - x(i0 / S.fpsL), ph);
   }
-  const H = h - top - bottom, a = x(i0 / S.fpsL), b = x((i1 + 1) / S.fpsL);
-  ctx.save(); ctx.beginPath(); ctx.rect(gut, top, w - right - gut, H); ctx.clip();
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(HM.img, a, top, b - a, H);
   ctx.restore();
-  // groups
-  ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  let r0 = 0;
-  for (const g of ROWS) {
-    const ya = top + (r0 / n) * H, yb = top + ((r0 + g.idx.length) / n) * H;
-    ctx.fillStyle = INK2; ctx.fillText(`${g.label} (${g.idx.length})`, gut - 10, (ya + yb) / 2);
-    ctx.fillStyle = INK3; ctx.fillRect(gut - 5, ya + 1, 2, yb - ya - 2);
-    if (r0) { ctx.fillStyle = '#0e1013'; ctx.fillRect(gut, ya - 0.5, w - right - gut, 1); }
-    r0 += g.idx.length;
+
+  // neuron names, groups (label, bracket, separator)
+  const sil = new Set(S.loop ? silenced() : []);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  if (L.names) {
+    ctx.font = `${Math.min(11, L.rh - 2)}px system-ui, sans-serif`;
+    rows.forEach((i, r) => { ctx.fillStyle = sil.has(i) ? SIL : INK2; ctx.fillText(m.neuron_names[i], x0 - 8, L.top + L.rh * (r + 0.5)); });
   }
-  // color scale
-  const lx = w - right + 14, lh = Math.min(120, H - 20), ly = top + (H - lh) / 2;
-  for (let k = 0; k < lh; k++) { const rgb = LUT[Math.round((1 - k / lh) * 255)]; ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(lx, ly + k, 10, 1.2); }
-  ctx.fillStyle = INK3; ctx.textAlign = 'left';
-  ctx.fillText('+2.5', lx + 14, ly + 4); ctx.fillText('0', lx + 14, ly + lh / 2); ctx.fillText('−2.5', lx + 14, ly + lh - 4);
-  timeAxis(ctx, gut, w - right, h - bottom + 6, S.win);
+  ctx.font = '11px system-ui, sans-serif';
+  for (let r0 = 0; r0 < n;) {
+    let r1 = r0;
+    while (r1 + 1 < n && m.group[rows[r1 + 1]] === m.group[rows[r0]]) r1++;
+    const ya = L.top + r0 * L.rh, yb = L.top + (r1 + 1) * L.rh, bx = L.names ? x0 - 58 : x0 - 6;
+    if (r0) { ctx.fillStyle = ACT.view === 'curves' ? LINE : '#16191e'; ctx.fillRect(x0, ya - 0.5, x1 - x0, 1); }
+    if (L.groups) {
+      ctx.fillStyle = INK3; ctx.fillRect(bx, ya + 1.5, 2, yb - ya - 3);
+      if (yb - ya >= 11) { ctx.fillStyle = INK2; ctx.fillText(`${m.group[rows[r0]]} (${r1 - r0 + 1})`, bx - 6, (ya + yb) / 2); }
+    }
+    r0 = r1 + 1;
+  }
+
+  // scale: a bar for the curves, a color bar for the raster
+  const sx = x1 + 14;
+  ctx.textAlign = 'left'; ctx.fillStyle = INK3;
+  if (ACT.view === 'curves') {
+    const u = ACT.z ? 1 : [0.02, 0.05, 0.1, 0.2, 0.5, 1].filter((v) => v * gain <= Math.max(24, L.rh * 1.6)).pop() || 0.02;
+    const len = u * gain, y0 = L.top + 6;
+    ctx.fillStyle = INK2; ctx.fillRect(sx, y0, 2, len);
+    ctx.fillStyle = INK3; ctx.textBaseline = 'middle';
+    ctx.fillText(ACT.z ? '1 s.d.' : `${u}`, sx + 7, y0 + len / 2);
+    if (!ACT.z) ctx.fillText('ΔF/F', sx + 7, y0 + len / 2 + 13);
+  } else {
+    const lut = ACT.z ? LUT : SEQ, lh = Math.min(120, ph - 16), ly = L.top + (ph - lh) / 2;
+    for (let q = 0; q < lh; q++) { const rgb = lut[Math.round((1 - q / lh) * 255)]; ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(sx, ly + q, 10, 1.2); }
+    ctx.fillStyle = INK3; ctx.textBaseline = 'middle';
+    const [hi, mid, lo] = ACT.z ? ['+2.5', '0', '−2.5'] : [RAW.hi.toFixed(2), (RAW.hi / 2).toFixed(2), '0'];
+    ctx.fillText(hi, sx + 14, ly + 4); ctx.fillText(mid, sx + 14, ly + lh / 2); ctx.fillText(lo, sx + 14, ly + lh - 4);
+    ctx.textBaseline = 'bottom'; ctx.fillText(ACT.z ? 'z' : 'ΔF/F', sx, ly - 6);
+  }
+  timeAxis(ctx, x0, x1, L.top + ph + 8, S.win);
+}
+
+// the curves at the time of step i1 (x1 = that time), with the behavior bands behind them
+function curvesImage(cv, L, rows, x1, k, i0, i1, gain) {
+  const m = S.meta, key = [ACT.set, ACT.z, i0, i1, S.steps.length ? S.steps[0].i : 0, cv.width, cv.height, L.rh, x1, rows.join(',')].join('|');
+  if (ACT.key === key) return;
+  ACT.key = key;
+  const off = ACT.off || (ACT.off = document.createElement('canvas')), d = window.devicePixelRatio || 1;
+  off.width = cv.width; off.height = cv.height;
+  const c = off.getContext('2d');
+  c.setTransform(d, 0, 0, d, 0, 0);
+  const xr = (i) => x1 - (i1 - i) / S.fpsL * k, ph = rows.length * L.rh;
+  c.globalAlpha = 0.14;
+  for (let i = i0; i <= i1; i++) {
+    const st = stepAt(i);
+    if (st) { c.fillStyle = m.behavior_colors[st.label]; c.fillRect(xr(i), L.top, k / S.fpsL + 0.6, ph); }
+  }
+  c.globalAlpha = 1; c.lineWidth = rows.length > 40 ? 1 : 1.3; c.lineJoin = 'round';
+  const lim = L.rh * 2.4;                                         // raw peaks may overlap the rows above
+  rows.forEach((n, r) => {
+    const yc = L.top + L.rh * (r + 0.5);
+    const y = (v) => yc - Math.max(-lim, Math.min(lim, (ACT.z ? Math.max(-2.5, Math.min(2.5, zscore(n, v))) : v - m.mean[n]) * gain));
+    let col = null, prev = null;
+    for (let i = i0; i <= i1; i++) {
+      const st = stepAt(i);
+      if (!st) { if (col) c.stroke(); col = null; prev = null; continue; }
+      const p = [xr(i), y(st.x[n])], cc = st.silenced.includes(n) ? SIL : TRACE;
+      if (prev) {
+        if (cc !== col) { if (col) c.stroke(); c.strokeStyle = cc; c.beginPath(); c.moveTo(prev[0], prev[1]); col = cc; }
+        c.lineTo(p[0], p[1]);
+      }
+      prev = p;
+    }
+    if (col) c.stroke();
+  });
+}
+
+// one pixel per step (columns) and neuron (rows)
+function rasterImage(rows, i0, i1) {
+  const cols = i1 - i0 + 1, n = rows.length;
+  const key = [ACT.set, ACT.z, i0, i1, S.steps.length ? S.steps[0].i : 0, rows.join(',')].join('|');
+  if (ACT.ikey === key) return;
+  ACT.ikey = key;
+  if (!ACT.img || ACT.img.width !== cols || ACT.img.height !== n) { ACT.img = document.createElement('canvas'); ACT.img.width = cols; ACT.img.height = n; }
+  const c = ACT.img.getContext('2d'), im = c.createImageData(cols, n);
+  for (let q = 0; q < cols; q++) {
+    const st = stepAt(i0 + q);
+    if (!st) continue;
+    rows.forEach((i, r) => {
+      const o = (r * cols + q) * 4, v = st.x[i];
+      const rgb = ACT.z ? LUT[Math.round((Math.max(-2.5, Math.min(2.5, zscore(i, v))) / 2.5 + 1) / 2 * 255)]
+        : SEQ[Math.round(Math.max(0, Math.min(1, (v - RAW.lo) / (RAW.hi - RAW.lo))) * 255)];
+      im.data[o] = rgb[0]; im.data[o + 1] = rgb[1]; im.data[o + 2] = rgb[2]; im.data[o + 3] = 255;
+    });
+  }
+  c.putImageData(im, 0, 0);
 }
 
 // ------------------------------------------------------------------------------------------------- latent
@@ -512,8 +567,7 @@ function tick(now) {
   drawArena(dt);
   drawBehaviorCard();
   drawEthogram();
-  drawTraces();
-  drawHeatmap();
+  drawActivity();
   drawLatent();
   if (S.start && Math.floor(now / 250) !== S.lastStatus) {
     S.lastStatus = Math.floor(now / 250);

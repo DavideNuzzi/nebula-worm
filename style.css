@@ -24,7 +24,7 @@ body {
 
 .top { max-width: 1400px; margin: 0 auto 12px; }
 .title h1 { margin: 0; font-size: 1.55rem; font-weight: 650; letter-spacing: -0.01em; }
-.title p { margin: 4px 0 12px; color: var(--ink-2); max-width: 70ch; line-height: 1.45; }
+.title p { margin: 4px 0 12px; color: var(--ink-2); line-height: 1.45; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
 .btn {
@@ -44,6 +44,13 @@ body {
   padding: 7px 11px; font: inherit; cursor: pointer;
 }
 .seg button[aria-pressed="true"] { background: #273141; color: var(--ink); }
+.seg.compact button { padding: 5px 9px; font-size: 0.88rem; }
+.seg.compact .seg-label { font-size: 0.8rem; }
+.seg .n { color: var(--ink-3); margin-left: 3px; font-variant-numeric: tabular-nums; }
+
+.card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.card-head h2 { margin: 0; }
+.panel-ctrl { display: flex; flex-wrap: wrap; gap: 8px; }
 .seg button:hover { color: var(--ink); }
 
 .status { margin: 10px 0 0; color: var(--ink-3); font-variant-numeric: tabular-nums; min-height: 1.3em; }
@@ -100,16 +107,20 @@ select:disabled { opacity: 0.4; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; color: var(--ink-2); font-size: 0.85rem; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 
-#traces { height: 420px; }
+#activity { height: 480px; }
+#activity + p { margin: 6px 0 0; max-width: 120ch; }
 #latent { height: 360px; cursor: grab; touch-action: none; }
-#heatmap { height: 300px; }
 
 .about .pipeline { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink-2); line-height: 1.5; display: grid; gap: 6px; max-width: 110ch; }
 .about b { color: var(--ink); font-weight: 600; }
 .about a { color: var(--accent); }
 
+@media (max-width: 480px) {
+  .seg.compact .seg-label { display: none; }
+  .seg.compact button { padding: 5px 8px; }
+}
+
 @media (max-width: 900px) {
   .grid { grid-template-columns: minmax(0, 1fr); }
   #arena { height: 360px; }
-  #traces { height: 380px; }
 }
