@@ -109,7 +109,11 @@ select:disabled { opacity: 0.4; }
 
 #activity { height: 480px; }
 #activity + p { margin: 6px 0 0; max-width: 120ch; }
-#latent { height: 360px; cursor: grab; touch-action: none; }
+/* the latent card fills the side column next to the arena */
+.latent-card { flex: 1 1 auto; display: flex; flex-direction: column; }
+#latent { flex: 1 1 0; height: 0; min-height: 260px; cursor: grab; touch-action: none; }
+.latent-card p { margin: 8px 0 0; }
+.sil-card { align-self: start; position: sticky; top: 12px; }
 
 .about .pipeline { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink-2); line-height: 1.5; display: grid; gap: 6px; max-width: 110ch; }
 .about b { color: var(--ink); font-weight: 600; }
@@ -122,5 +126,7 @@ select:disabled { opacity: 0.4; }
 
 @media (max-width: 900px) {
   .grid { grid-template-columns: minmax(0, 1fr); }
+  #latent { flex: none; height: 340px; }
+  .sil-card { position: static; }
   #arena { height: 360px; }
 }
