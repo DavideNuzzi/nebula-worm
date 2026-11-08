@@ -362,8 +362,8 @@ function drawEthogram() {
 
 // ------------------------------------------------------------------------------------------------- decoded activity
 // One panel, two views: curves (cached in an offscreen canvas drawn at the time of the last step, then shifted to the
-// display time) or raster (one pixel per step and neuron, scaled). Rows follow meta.order (groups of the silencing
-// blocks); the neurons silenced one by one are always shown.
+// display time) or raster (one pixel per step and neuron, scaled). Rows follow meta.order (by silencing block, along
+// the behavioral cycle); the neurons silenced one by one are always shown.
 const ACT = { view: 'curves', set: 'named', z: true, off: null, key: '', img: null, ikey: '' };
 
 function activityRows() {
@@ -372,11 +372,8 @@ function activityRows() {
 }
 
 function activityLayout(w, n) {
-  const curves = ACT.view === 'curves';
-  const rh = curves ? (n <= 16 ? 26 : n <= 40 ? 17 : 11) : (n <= 16 ? 22 : n <= 40 ? 13 : 5);
-  const names = rh >= 8, groups = !names || w >= 560;
-  const gut = (groups ? 76 : 0) + (names ? 50 : 0) + 8, right = 58, top = 4, bottom = 24;
-  return { rh, names, groups, gut, right, top, bottom, H: Math.round(top + n * rh + bottom) };
+  const rh = ACT.view === 'curves' ? (n <= 16 ? 26 : n <= 40 ? 17 : 11) : (n <= 16 ? 22 : n <= 40 ? 13 : 5);
+  return { rh, gut: 58, right: 58, top: 4, bottom: 24, H: Math.round(4 + n * rh + 24) };
 }
 
 function drawActivity() {
@@ -398,25 +395,18 @@ function drawActivity() {
   }
   ctx.restore();
 
-  // neuron names, groups (label, bracket, separator)
-  const sil = new Set(S.loop ? silenced() : []);
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  if (L.names) {
-    ctx.font = `${Math.min(11, L.rh - 2)}px system-ui, sans-serif`;
-    rows.forEach((i, r) => { ctx.fillStyle = sil.has(i) ? SIL : INK2; ctx.fillText(m.neuron_names[i], x0 - 8, L.top + L.rh * (r + 0.5)); });
+  // neuron names; where the rows are thinner than the text, only the named neurons, none overlapping
+  const sil = new Set(S.loop ? silenced() : []), fs = Math.max(9, Math.min(11, L.rh - 2)), drawn = [];
+  ctx.font = `${fs}px system-ui, sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const unnamed = (i) => (m.neuron_names[i].startsWith('#') ? 1 : 0);
+  for (const r of rows.map((_, r) => r).sort((a, b) => unnamed(rows[a]) - unnamed(rows[b]))) {
+    const y = L.top + L.rh * (r + 0.5);
+    if (L.rh < fs + 1 && unnamed(rows[r])) continue;
+    if (drawn.some((v) => Math.abs(v - y) < fs + 1)) continue;
+    drawn.push(y);
+    ctx.fillStyle = sil.has(rows[r]) ? SIL : INK2; ctx.fillText(m.neuron_names[rows[r]], x0 - 8, y);
   }
   ctx.font = '11px system-ui, sans-serif';
-  for (let r0 = 0; r0 < n;) {
-    let r1 = r0;
-    while (r1 + 1 < n && m.group[rows[r1 + 1]] === m.group[rows[r0]]) r1++;
-    const ya = L.top + r0 * L.rh, yb = L.top + (r1 + 1) * L.rh, bx = L.names ? x0 - 56 : x0 - 6;
-    if (r0) { ctx.fillStyle = ACT.view === 'curves' ? LINE : '#16191e'; ctx.fillRect(x0, ya - 0.5, x1 - x0, 1); }
-    if (L.groups) {
-      ctx.fillStyle = INK3; ctx.fillRect(bx, ya + 1.5, 2, yb - ya - 3);
-      if (yb - ya >= 11) { ctx.fillStyle = INK2; ctx.fillText(m.group[rows[r0]], bx - 6, (ya + yb) / 2); }
-    }
-    r0 = r1 + 1;
-  }
 
   // scale: a bar for the curves, a color bar for the raster
   const sx = x1 + 14;

@@ -67,19 +67,22 @@ body {
 .side { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 canvas { display: block; width: 100%; }
 
-.arena-card { position: relative; padding: 0; overflow: hidden; }
-#arena { height: clamp(320px, 56vh, 640px); }
+/* the arena fills its card, which the grid stretches to the height of the side column */
+.arena-card { position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+#arena { flex: 1 1 0; height: 0; min-height: clamp(360px, 62vh, 700px); }
 .arena-ui { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
 
-.now { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.now { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: #555; flex: none; }
-.swatch.big { width: 28px; height: 28px; border-radius: 7px; }
-.now-name { font-size: 1.35rem; font-weight: 600; }
+.swatch.big { width: 22px; height: 22px; border-radius: 6px; }
+.now-name { font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
 .muted { color: var(--ink-3); }
 .small { font-size: 0.85rem; line-height: 1.4; }
 
-.probs { display: grid; grid-template-columns: max-content minmax(0, 1fr) 3.2em; gap: 4px 10px; align-items: center; }
+/* two behaviors per row */
+.probs { display: grid; grid-template-columns: repeat(2, max-content minmax(0, 1fr) 2.8em); gap: 3px 8px; align-items: center; }
 .probs .nm { color: var(--ink-2); font-size: 0.88rem; }
+.probs .nm:nth-child(6n + 4) { padding-left: 16px; }
 .probs .bar { height: 9px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .probs .bar i { display: block; height: 100%; border-radius: 3px; width: 0; }
 .probs .pc { text-align: right; color: var(--ink-3); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
@@ -111,15 +114,16 @@ select:disabled { opacity: 0.4; }
 #activity + p { margin: 6px 0 0; max-width: 120ch; }
 /* the latent card fills the side column next to the arena */
 .latent-card { flex: 1 1 auto; display: flex; flex-direction: column; }
-#latent { flex: 1 1 0; height: 0; min-height: 260px; cursor: grab; touch-action: none; }
+#latent { flex: 1 1 0; height: 0; min-height: 320px; cursor: grab; touch-action: none; }
 .latent-card p { margin: 8px 0 0; }
-.sil-card { align-self: start; position: sticky; top: 12px; }
 
 .about .pipeline { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink-2); line-height: 1.5; display: grid; gap: 6px; max-width: 110ch; }
 .about b { color: var(--ink); font-weight: 600; }
 .about a { color: var(--accent); }
 
 @media (max-width: 480px) {
+  .probs { grid-template-columns: max-content minmax(0, 1fr) 2.8em; }
+  .probs .nm:nth-child(6n + 4) { padding-left: 0; }
   .seg.compact .seg-label { display: none; }
   .seg.compact button { padding: 5px 8px; }
 }
@@ -127,6 +131,5 @@ select:disabled { opacity: 0.4; }
 @media (max-width: 900px) {
   .grid { grid-template-columns: minmax(0, 1fr); }
   #latent { flex: none; height: 340px; }
-  .sil-card { position: static; }
-  #arena { height: 360px; }
+  #arena { flex: none; height: 360px; min-height: 0; }
 }
